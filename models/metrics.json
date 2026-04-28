@@ -1,0 +1,21 @@
+{
+  "selected_model": "random_forest",
+  "metrics": {
+    "ridge": {
+      "mae": 178.5172,
+      "rmse": 243.3176,
+      "best_params": {
+        "model__alpha": 100.0
+      }
+    },
+    "random_forest": {
+      "mae": 0.5162,
+      "rmse": 2.0254,
+      "best_params": {
+        "model__max_depth": 15,
+        "model__min_samples_leaf": 1,
+        "model__n_estimators": 500
+      }
+    }
+  }
+}

@@ -1,0 +1,299 @@
+﻿<main class="layout">
+  <section class="hero">
+    <p class="kicker">Small Business AI Assistant</p>
+    <h1>7-Day Sales Forecast Dashboard</h1>
+    <p class="subtitle">
+      Predict future sales, evaluate model performance, and compare products. Powered by machine learning.
+    </p>
+  </section>
+
+  <section class="dashboard">
+    <nav class="tab-nav">
+      <button 
+        [class.active]="activeTab === 'forecast'" 
+        (click)="setActiveTab('forecast')"
+        class="tab-button">
+        📊 Forecast
+      </button>
+      <button 
+        [class.active]="activeTab === 'evaluation'" 
+        (click)="setActiveTab('evaluation')"
+        class="tab-button">
+        📈 Model Evaluation
+      </button>
+      <button 
+        [class.active]="activeTab === 'comparison'" 
+        (click)="setActiveTab('comparison')"
+        class="tab-button">
+        🏆 Product Comparison
+      </button>
+    </nav>
+
+    @if (errorMessage) {
+      <div class="alert alert-error">{{ errorMessage }}</div>
+    }
+    @if (successMessage) {
+      <div class="alert alert-success">{{ successMessage }}</div>
+    }
+
+    <!-- FORECAST TAB -->
+    @if (activeTab === 'forecast') {
+      <div class="tab-content">
+        <form [formGroup]="forecastForm" (ngSubmit)="submitForecast()" class="form-grid">
+          <label>
+            Product
+            <select formControlName="product">
+              @for (prod of products; track prod) {
+                <option [value]="prod">{{ prod }}</option>
+              }
+            </select>
+          </label>
+
+          <label>
+            Start Date
+            <input type="date" formControlName="start_date" />
+          </label>
+
+          <label>
+            End Date
+            <input type="date" formControlName="end_date" />
+          </label>
+
+          <label>
+            Recent Average Sales (optional)
+            <input type="number" formControlName="recent_average_sales" min="0" step="0.01" placeholder="200" />
+          </label>
+
+          <button type="submit" [disabled]="loadingForecast" class="btn-primary">
+            @if (loadingForecast) {
+              Forecasting...
+            } @else {
+              Generate 7-Day Forecast
+            }
+          </button>
+        </form>
+
+        @if (forecastData) {
+          <div class="forecast-section">
+            <div class="summary-cards">
+              <article class="summary-card">
+                <h3>Total Days</h3>
+                <p class="metric">{{ forecastData.summary.total_days }}</p>
+              </article>
+              <article class="summary-card">
+                <h3>Avg Sales</h3>
+                <p class="metric">${{ forecastData.summary.avg_predicted_sales.toFixed(2) }}</p>
+              </article>
+              <article class="summary-card highlight">
+                <h3>Primary Action</h3>
+                <p class="metric-action">
+                  @if (forecastData.summary.increase_stock_count > forecastData.summary.reduce_inventory_count) {
+                    Increase Stock
+                  } @else if (forecastData.summary.reduce_inventory_count > forecastData.summary.increase_stock_count) {
+                    Reduce Inventory
+                  } @else {
+                    Maintain Stock
+                  }
+                </p>
+              </article>
+            </div>
+
+            <div class="charts-grid">
+              <div class="chart-container">
+                <h3>Sales Forecast Trend</h3>
+                <canvas #lineChartCanvas></canvas>
+              </div>
+              <div class="chart-container">
+                <h3>Suggestion Distribution</h3>
+                <canvas #barChartCanvas></canvas>
+              </div>
+            </div>
+
+            <div class="table-section">
+              <h3>Daily Predictions</h3>
+              <div class="table-wrapper">
+                <table class="forecast-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Predicted Sales</th>
+                      <th>Suggestion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of forecastData.daily_rows; track row.date) {
+                      <tr>
+                        <td>{{ row.date }}</td>
+                        <td>${{ row.predicted_sales.toFixed(2) }}</td>
+                        <td>
+                          <span [class]="'suggestion ' + getSuggestionClass(row.suggestion)">
+                            {{ row.suggestion }}
+                          </span>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            @if (forecastData.selected_model) {
+              <p class="model-info">Model: {{ forecastData.selected_model }}</p>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <!-- EVALUATION TAB -->
+    @if (activeTab === 'evaluation') {
+      <div class="tab-content">
+        <div class="evaluation-intro">
+          <p>Evaluate model performance against actual sales data.</p>
+          <button (click)="submitEvaluation()" [disabled]="loadingEvaluation" class="btn-primary">
+            @if (loadingEvaluation) {
+              Loading Evaluation...
+            } @else {
+              Load Model Evaluation
+            }
+          </button>
+        </div>
+
+        @if (evaluationData) {
+          <div class="evaluation-section">
+            <div class="metrics-grid">
+              <article class="metric-card">
+                <h4>Total Samples</h4>
+                <p class="metric-value">{{ evaluationData.summary.total_samples }}</p>
+              </article>
+              <article class="metric-card">
+                <h4>MAE</h4>
+                <p class="metric-value">${{ evaluationData.summary.overall_mae.toFixed(2) }}</p>
+              </article>
+              <article class="metric-card">
+                <h4>RMSE</h4>
+                <p class="metric-value">${{ evaluationData.summary.overall_rmse.toFixed(2) }}</p>
+              </article>
+              <article class="metric-card">
+                <h4>MAPE</h4>
+                <p class="metric-value">{{ evaluationData.summary.overall_mape.toFixed(2) }}%</p>
+              </article>
+            </div>
+
+            <div class="chart-container chart-container-large">
+              <h3>Actual vs Predicted Sales</h3>
+              <canvas #evaluationChartCanvas></canvas>
+            </div>
+
+            <div class="table-section">
+              <h3>Sample Evaluation</h3>
+              <div class="table-wrapper">
+                <table class="evaluation-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Actual Sales</th>
+                      <th>Predicted Sales</th>
+                      <th>Error</th>
+                      <th>Error %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of evaluationData.evaluation_rows; track row.date) {
+                      <tr>
+                        <td>{{ row.date }}</td>
+                        <td>${{ row.actual_sales.toFixed(2) }}</td>
+                        <td>${{ row.predicted_sales.toFixed(2) }}</td>
+                        <td>${{ row.absolute_error.toFixed(2) }}</td>
+                        <td>{{ row.error_percentage.toFixed(2) }}%</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- COMPARISON TAB -->
+    @if (activeTab === 'comparison') {
+      <div class="tab-content">
+        <form [formGroup]="comparisonForm" (ngSubmit)="submitComparison()" class="comparison-form">
+          <label>Select Products to Compare:</label>
+          <div class="product-selector">
+            @for (product of products; track product) {
+              <button
+                type="button"
+                [class.selected]="isProductSelected(product)"
+                (click)="toggleProductSelection(product)"
+                class="product-btn">
+                {{ product }}
+              </button>
+            }
+          </div>
+
+          <button type="submit" [disabled]="loadingComparison" class="btn-primary">
+            @if (loadingComparison) {
+              Comparing...
+            } @else {
+              Compare Products (7 Days)
+            }
+          </button>
+        </form>
+
+        @if (comparisonData) {
+          <div class="comparison-section">
+            <div class="highest-demand-card">
+              <h3>🏆 Highest Demand Product</h3>
+              <p class="product-winner">{{ comparisonData.highest_demand_product }}</p>
+              <p class="product-sales">Avg Sales: ${{ comparisonData.highest_demand_average_sales.toFixed(2) }}</p>
+            </div>
+
+            <div class="chart-container chart-container-large">
+              <h3>Average Sales Comparison</h3>
+              <canvas #comparisonChartCanvas></canvas>
+            </div>
+
+            <div class="table-section">
+              <h3>Detailed Metrics</h3>
+              <div class="table-wrapper">
+                <table class="comparison-table">
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>Days</th>
+                      <th>Avg Sales</th>
+                      <th>Total Sales</th>
+                      <th>Increase</th>
+                      <th>Maintain</th>
+                      <th>Reduce</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (metric of comparisonData.comparison_metrics; track metric.product) {
+                      <tr>
+                        <td><strong>{{ metric.product }}</strong></td>
+                        <td>{{ metric.total_days }}</td>
+                        <td>${{ metric.avg_predicted_sales.toFixed(2) }}</td>
+                        <td>${{ metric.sum_predicted_sales.toFixed(2) }}</td>
+                        <td>{{ metric.increase_stock_count }}</td>
+                        <td>{{ metric.maintain_stock_count }}</td>
+                        <td>{{ metric.reduce_inventory_count }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            @if (comparisonData.selected_model) {
+              <p class="model-info">Model: {{ comparisonData.selected_model }}</p>
+            }
+          </div>
+        }
+      </div>
+    }
+  </section>
+</main>

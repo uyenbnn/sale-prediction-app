@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Prediction Backend Flow</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: #f3f6fb;
+            color: #1e293b;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #0f172a;
+            font-size: 2rem;
+        }
+
+        .section {
+            background: #ffffff;
+            border: 1px solid #dbe3ef;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 16px;
+        }
+
+        .section h2 {
+            font-size: 1.2rem;
+            margin-bottom: 12px;
+            color: #1d4ed8;
+        }
+
+        .muted {
+            color: #475569;
+            font-size: 0.95rem;
+        }
+
+        .code {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-top: 8px;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+
+        .flow-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .node {
+            background: #e8f0ff;
+            border: 1px solid #bdd2ff;
+            border-radius: 10px;
+            padding: 10px 12px;
+            min-width: 120px;
+            text-align: center;
+            font-weight: 600;
+            color: #1e3a8a;
+        }
+
+        .node.strong {
+            background: #dbeafe;
+            border-color: #93c5fd;
+        }
+
+        .arrow {
+            font-size: 18px;
+            color: #2563eb;
+            font-weight: 700;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 12px;
+        }
+
+        .card {
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            padding: 12px;
+            background: #f8fbff;
+        }
+
+        .card h3 {
+            font-size: 1rem;
+            margin-bottom: 8px;
+            color: #1e3a8a;
+        }
+
+        .card ul {
+            margin-left: 18px;
+            line-height: 1.5;
+            color: #334155;
+            font-size: 0.92rem;
+        }
+
+        @media (max-width: 700px) {
+            .flow-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .arrow {
+                align-self: center;
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sales Prediction Backend Flow</h1>
+
+        <div class="section">
+            <h2>Quick Start</h2>
+            <p class="muted">Run from backend folder</p>
+            <div class="code">c:/Users/bnnuyen/NHI_UYEN/projects/sale-prediction/.venv/Scripts/python.exe -m src.train --dataset ../data/retail_sales_dataset.csv
+c:/Users/bnnuyen/NHI_UYEN/projects/sale-prediction/.venv/Scripts/python.exe -m uvicorn src.api.app:app --reload --port 8000</div>
+        </div>
+
+        <div class="section">
+            <h2>Training Flow</h2>
+            <div class="flow-row">
+                <div class="node">Load CSV</div>
+                <div class="arrow">-></div>
+                <div class="node">Build Features</div>
+                <div class="arrow">-></div>
+                <div class="node strong">Tune Models</div>
+                <div class="arrow">-></div>
+                <div class="node">Pick Best RMSE</div>
+                <div class="arrow">-></div>
+                <div class="node">Save Artifacts</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Model Tuning Process</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Cross Validation</h3>
+                    <ul>
+                        <li>TimeSeriesSplit (5 folds)</li>
+                        <li>Date-sorted training data</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Models Tuned</h3>
+                    <ul>
+                        <li>Ridge: alpha grid</li>
+                        <li>Random Forest: trees, depth, leaf size</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Search Method</h3>
+                    <ul>
+                        <li>GridSearchCV per model</li>
+                        <li>Scoring: negative MSE</li>
+                        <li>n_jobs=1 (stable on Windows)</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Selection Output</h3>
+                    <ul>
+                        <li>Compute MAE and RMSE</li>
+                        <li>Select lowest RMSE</li>
+                        <li>Save model + metrics.json</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>API Startup Flow</h2>
+            <div class="flow-row">
+                <div class="node">Start FastAPI</div>
+                <div class="arrow">-></div>
+                <div class="node">Add CORS</div>
+                <div class="arrow">-></div>
+                <div class="node">Mount /static</div>
+                <div class="arrow">-></div>
+                <div class="node">Register /api routes</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Request Flows (Simple)</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>POST /api/predict</h3>
+                    <ul>
+                        <li>Build one feature row</li>
+                        <li>Predict sales</li>
+                        <li>Return suggestion</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>POST /api/forecast-range</h3>
+                    <ul>
+                        <li>Input: start_date + end_date</li>
+                        <li>Loop dates and predict daily</li>
+                        <li>Return daily rows + summary</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>GET /api/model-evaluation</h3>
+                    <ul>
+                        <li>Check cache</li>
+                        <li>Evaluate full dataset</li>
+                        <li>Generate chart and metrics</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>POST /api/compare-products</h3>
+                    <ul>
+                        <li>Predict each product over 7 days</li>
+                        <li>Aggregate and rank demand</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Saved Files</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Model</h3>
+                    <ul><li>models/sales_model.joblib</li></ul>
+                </div>
+                <div class="card">
+                    <h3>Metrics</h3>
+                    <ul><li>models/metrics.json</li></ul>
+                </div>
+                <div class="card">
+                    <h3>Chart</h3>
+                    <ul><li>models/charts/model_evaluation.png</li></ul>
+                </div>
+                <div class="card">
+                    <h3>Dataset</h3>
+                    <ul><li>data/retail_sales_dataset.csv</li></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

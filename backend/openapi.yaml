@@ -1,0 +1,485 @@
+openapi: 3.1.0
+info:
+  title: Sales Prediction API
+  version: 0.1.0
+  summary: Sales forecasting, model evaluation, and stock recommendations.
+  description: |
+    API for small-business decision support.
+    It predicts sales, evaluates model performance, and provides inventory suggestions.
+
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local development server
+
+tags:
+  - name: health
+    description: Service health checks
+  - name: prediction
+    description: Sales forecasting and recommendations
+
+paths:
+  /api/health:
+    get:
+      tags: [health]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+
+  /api/predict:
+    post:
+      tags: [prediction]
+      summary: Predict sales and return inventory suggestion
+      operationId: postPredict
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictRequest'
+            examples:
+              basic:
+                summary: Prediction request with optional recent average
+                value:
+                  product: Beauty
+                  date: '2024-01-15'
+                  recent_average_sales: 200
+      responses:
+        '200':
+          description: Prediction completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictResponse'
+              example:
+                product: Beauty
+                date: '2024-01-15'
+                predicted_sales: 508.16
+                suggestion: Increase stock
+                selected_model: linear_regression
+        '400':
+          description: Invalid input (for example invalid date format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: Invalid date format. Use YYYY-MM-DD.
+        '503':
+          description: Model is not trained yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: Model not trained yet. Run training first.
+
+  /api/forecast-range:
+    post:
+      tags: [prediction]
+      summary: Forecast sales for a product across a date range
+      operationId: postForecastRange
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForecastRangeRequest'
+            example:
+              product: Beauty
+              start_date: '2024-01-01'
+              end_date: '2024-01-07'
+              recent_average_sales: 200
+      responses:
+        '200':
+          description: Range forecast completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForecastRangeResponse'
+        '400':
+          description: Invalid input (for example date format or range)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: Invalid date format. Use YYYY-MM-DD.
+        '503':
+          description: Model is not trained yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: Model not trained yet. Run training first.
+
+  /api/model-evaluation:
+    get:
+      tags: [prediction]
+      summary: Evaluate trained model against dataset and return chart image info
+      operationId: getModelEvaluation
+      responses:
+        '200':
+          description: Model evaluation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResponse'
+        '500':
+          description: Dataset loading or chart generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Model is not trained yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: Model not trained yet. Run training first.
+
+  /api/compare-products:
+    post:
+      tags: [prediction]
+      summary: Compare predicted demand metrics across products
+      operationId: postCompareProducts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+            example:
+              - Beauty
+              - Electronics
+              - Grocery
+      responses:
+        '200':
+          description: Product comparison completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductComparisonResponse'
+        '503':
+          description: Model is not trained yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: Model not trained yet. Run training first.
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+
+    PredictRequest:
+      type: object
+      required: [product, date]
+      properties:
+        product:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Product or product category name.
+          example: Beauty
+        date:
+          type: string
+          format: date
+          description: Prediction date in YYYY-MM-DD format.
+          example: '2024-01-15'
+        recent_average_sales:
+          type: number
+          minimum: 0
+          nullable: true
+          description: Optional recent average sales used to refine recommendation threshold.
+          example: 200
+
+    PredictResponse:
+      type: object
+      required: [product, date, predicted_sales, suggestion]
+      properties:
+        product:
+          type: string
+          example: Beauty
+        date:
+          type: string
+          format: date
+          example: '2024-01-15'
+        predicted_sales:
+          type: number
+          format: float
+          example: 508.16
+        suggestion:
+          type: string
+          enum: [Increase stock, Maintain stock, Reduce inventory]
+          example: Increase stock
+        selected_model:
+          type: string
+          nullable: true
+          description: Name of the model currently selected during training.
+          example: linear_regression
+
+    ForecastRangeRequest:
+      type: object
+      required: [product, start_date, end_date]
+      properties:
+        product:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Beauty
+        start_date:
+          type: string
+          format: date
+          description: Start date in YYYY-MM-DD format.
+          example: '2024-01-01'
+        end_date:
+          type: string
+          format: date
+          description: End date in YYYY-MM-DD format.
+          example: '2024-01-07'
+        recent_average_sales:
+          type: number
+          minimum: 0
+          nullable: true
+          description: Optional recent average sales used to refine recommendation threshold.
+          example: 200
+
+    ForecastDayRow:
+      type: object
+      required: [date, predicted_sales, suggestion]
+      properties:
+        date:
+          type: string
+          format: date
+          example: '2024-01-01'
+        predicted_sales:
+          type: number
+          format: float
+          example: 420.52
+        suggestion:
+          type: string
+          enum: [Increase stock, Maintain stock, Reduce inventory]
+          example: Maintain stock
+
+    ForecastSummary:
+      type: object
+      required:
+        - total_days
+        - avg_predicted_sales
+        - increase_stock_count
+        - reduce_inventory_count
+        - maintain_stock_count
+      properties:
+        total_days:
+          type: integer
+          example: 7
+        avg_predicted_sales:
+          type: number
+          format: float
+          example: 401.33
+        increase_stock_count:
+          type: integer
+          example: 2
+        reduce_inventory_count:
+          type: integer
+          example: 1
+        maintain_stock_count:
+          type: integer
+          example: 4
+
+    ForecastRangeResponse:
+      type: object
+      required: [daily_rows, summary]
+      properties:
+        daily_rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForecastDayRow'
+        summary:
+          $ref: '#/components/schemas/ForecastSummary'
+        selected_model:
+          type: string
+          nullable: true
+          example: linear_regression
+
+    EvaluationRow:
+      type: object
+      required: [date, product, actual_sales, predicted_sales, absolute_error, error_percentage]
+      properties:
+        date:
+          type: string
+          format: date
+          example: '2024-01-15'
+        product:
+          type: string
+          example: mixed
+        actual_sales:
+          type: number
+          format: float
+          example: 500
+        predicted_sales:
+          type: number
+          format: float
+          example: 508.16
+        absolute_error:
+          type: number
+          format: float
+          example: 8.16
+        error_percentage:
+          type: number
+          format: float
+          example: 1.63
+
+    AccuracyTrendPoint:
+      type: object
+      required: [period, mae, rmse, mape]
+      properties:
+        period:
+          type: string
+          example: Overall
+        mae:
+          type: number
+          format: float
+          example: 15.23
+        rmse:
+          type: number
+          format: float
+          example: 22.71
+        mape:
+          type: number
+          format: float
+          example: 0.08
+
+    EvaluationSummary:
+      type: object
+      required: [total_samples, overall_mae, overall_rmse, overall_mape, best_product, worst_product]
+      properties:
+        total_samples:
+          type: integer
+          example: 1200
+        overall_mae:
+          type: number
+          format: float
+          example: 15.23
+        overall_rmse:
+          type: number
+          format: float
+          example: 22.71
+        overall_mape:
+          type: number
+          format: float
+          example: 0.08
+        best_product:
+          type: string
+          example: linear_regression
+        worst_product:
+          type: string
+          example: Random Forest
+
+    EvaluationResponse:
+      type: object
+      required: [evaluation_rows, summary, accuracy_trend]
+      properties:
+        evaluation_rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationRow'
+        summary:
+          $ref: '#/components/schemas/EvaluationSummary'
+        accuracy_trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccuracyTrendPoint'
+        chart_image_url:
+          type: string
+          nullable: true
+          description: Relative URL of the generated evaluation chart image.
+          example: /static/charts/model_evaluation.png
+        chart_image_path:
+          type: string
+          nullable: true
+          description: Absolute filesystem path where the chart image is saved.
+          example: C:/Users/example/projects/sale-prediction/models/charts/model_evaluation.png
+
+    ProductComparisonMetric:
+      type: object
+      required:
+        - product
+        - total_days
+        - avg_predicted_sales
+        - sum_predicted_sales
+        - increase_stock_count
+        - reduce_inventory_count
+        - maintain_stock_count
+      properties:
+        product:
+          type: string
+          example: Beauty
+        total_days:
+          type: integer
+          example: 8
+        avg_predicted_sales:
+          type: number
+          format: float
+          example: 380.44
+        sum_predicted_sales:
+          type: number
+          format: float
+          example: 3043.52
+        increase_stock_count:
+          type: integer
+          example: 3
+        reduce_inventory_count:
+          type: integer
+          example: 1
+        maintain_stock_count:
+          type: integer
+          example: 4
+
+    ProductComparisonResponse:
+      type: object
+      required: [comparison_metrics, highest_demand_product, highest_demand_average_sales]
+      properties:
+        comparison_metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductComparisonMetric'
+        highest_demand_product:
+          type: string
+          example: Beauty
+        highest_demand_average_sales:
+          type: number
+          format: float
+          example: 380.44
+        selected_model:
+          type: string
+          nullable: true
+          example: linear_regression
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          example: Invalid date format. Use YYYY-MM-DD.
