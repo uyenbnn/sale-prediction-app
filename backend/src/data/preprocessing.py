@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
@@ -9,6 +11,8 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+from src.config import DEFAULT_DATASET
 
 
 DATE_CANDIDATES = ["date", "transaction_date", "order_date", "invoice_date"]
@@ -55,6 +59,15 @@ class TrainingData:
 
 class DataValidationError(ValueError):
     pass
+
+
+PROFILE_FEATURE_COLUMNS = [
+    "avg_price",
+    "avg_quantity",
+    "avg_age",
+    "sales_rolling_7",
+    "sales_rolling_30",
+]
 
 
 def _find_column(columns: pd.Index, candidates: list[str]) -> str | None:
@@ -204,6 +217,58 @@ def build_preprocessor() -> ColumnTransformer:
     )
 
 
+@lru_cache(maxsize=8)
+def _load_inference_profiles(
+    dataset_path: str,
+    dataset_mtime: float,
+) -> tuple[
+    dict[tuple[str, int, int], dict[str, float]],
+    dict[str, dict[str, float]],
+    dict[str, float],
+]:
+    del dataset_mtime
+
+    raw_df = pd.read_csv(dataset_path)
+    prepared = prepare_training_data(raw_df)
+    feature_frame = prepared.X.copy()
+    feature_frame["product_key"] = feature_frame["product"].astype(str).str.strip().str.casefold()
+
+    seasonal_profiles = (
+        feature_frame.groupby(["product_key", "month", "dayofweek"], dropna=False)[PROFILE_FEATURE_COLUMNS]
+        .mean()
+        .fillna(0.0)
+        .to_dict(orient="index")
+    )
+    product_profiles = (
+        feature_frame.groupby("product_key", dropna=False)[PROFILE_FEATURE_COLUMNS]
+        .mean()
+        .fillna(0.0)
+        .to_dict(orient="index")
+    )
+    global_profile = feature_frame[PROFILE_FEATURE_COLUMNS].mean().fillna(0.0).to_dict()
+    return seasonal_profiles, product_profiles, global_profile
+
+
+def _get_inference_profile(product: str, month: int, dayofweek: int) -> dict[str, float]:
+    dataset_path = Path(DEFAULT_DATASET)
+    if not dataset_path.exists():
+        return {column: 0.0 for column in PROFILE_FEATURE_COLUMNS}
+
+    seasonal_profiles, product_profiles, global_profile = _load_inference_profiles(
+        str(dataset_path),
+        dataset_path.stat().st_mtime,
+    )
+    product_key = str(product).strip().casefold()
+    profile = seasonal_profiles.get(
+        (product_key, month, dayofweek),
+        product_profiles.get(product_key, global_profile),
+    )
+    return {
+        column: float(profile.get(column, global_profile.get(column, 0.0)))
+        for column in PROFILE_FEATURE_COLUMNS
+    }
+
+
 def build_inference_row(
     product: str,
     date_value: str,
@@ -213,10 +278,19 @@ def build_inference_row(
     if pd.isna(dt):
         raise DataValidationError("Invalid date format. Use YYYY-MM-DD.")
 
+    product_name = str(product).strip()
+    if not product_name:
+        raise DataValidationError("Product is required.")
+
+    profile = _get_inference_profile(product_name, int(dt.month), int(dt.dayofweek))
+    if recent_average_sales is not None:
+        profile["sales_rolling_7"] = float(recent_average_sales)
+        profile["sales_rolling_30"] = float(recent_average_sales)
+
     return pd.DataFrame(
         [
             {
-                "product": product,
+                "product": product_name,
                 "year": dt.year,
                 "quarter": dt.quarter,
                 "month": dt.month,
@@ -229,12 +303,11 @@ def build_inference_row(
                 "month_cos": np.cos(2 * np.pi * dt.month / 12),
                 "dayofweek_sin": np.sin(2 * np.pi * dt.dayofweek / 7),
                 "dayofweek_cos": np.cos(2 * np.pi * dt.dayofweek / 7),
-                # Keep inference schema aligned with training features.
-                "avg_price": 0.0,
-                "avg_quantity": 0.0,
-                "avg_age": 0.0,
-                "sales_rolling_7": float(recent_average_sales or 0.0),
-                "sales_rolling_30": float(recent_average_sales or 0.0),
+                "avg_price": profile["avg_price"],
+                "avg_quantity": profile["avg_quantity"],
+                "avg_age": profile["avg_age"],
+                "sales_rolling_7": profile["sales_rolling_7"],
+                "sales_rolling_30": profile["sales_rolling_30"],
             }
         ]
     )

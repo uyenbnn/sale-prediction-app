@@ -1,4 +1,4 @@
-# 🚀 Model Evaluation API - User Guide
+# Model Evaluation API - User Guide
 
 ## Quick Start
 
