@@ -1,6 +1,30 @@
 from pydantic import BaseModel, Field
 
 
+class OverfittingAnalysis(BaseModel):
+    mae: float = Field(description="Mean Absolute Error")
+    rmse: float = Field(description="Root Mean Squared Error")
+    r2: float = Field(description="R² coefficient (0-1)")
+    mape: float = Field(description="Mean Absolute Percentage Error (%)")
+    is_acceptable: bool = Field(description="Whether R² is > 0.8")
+    interpretation: str = Field(description="Human-readable interpretation")
+
+
+class ModelEvaluationRequest(BaseModel):
+    dataset_name: str = Field(default="uploaded_dataset.csv")
+
+
+class ModelEvaluationResponse(BaseModel):
+    dataset_name: str
+    total_samples: int
+    metrics: OverfittingAnalysis
+    error_statistics: dict
+    sample_predictions: list[dict]
+    chart_image_url: str | None = None
+    chart_image_path: str | None = None
+    file_uploaded_successfully: bool
+
+
 class PredictRequest(BaseModel):
     product: str = Field(min_length=1, max_length=200)
     date: str = Field(description="Prediction date in YYYY-MM-DD format")

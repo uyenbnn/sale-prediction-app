@@ -1,0 +1,35 @@
+import pandas as pd
+
+orig = pd.read_csv('retail_sales_dataset.csv')
+test = pd.read_csv('retail_sales_dataset_test.csv')
+
+print('='*80)
+print('DETAILED COMPARISON (First 10 rows):')
+print('='*80)
+print()
+
+for i in range(10):
+    print(f'Row {i+1}:')
+    print(f'  Original: Age={int(orig.iloc[i]["Age"])}, Qty={int(orig.iloc[i]["Quantity"])}, Price={int(orig.iloc[i]["Price per Unit"])}, Total={int(orig.iloc[i]["Total Amount"])}, Date={orig.iloc[i]["Date"]}')
+    print(f'  Test:     Age={int(test.iloc[i]["Age"])}, Qty={int(test.iloc[i]["Quantity"])}, Price={int(test.iloc[i]["Price per Unit"])}, Total={int(test.iloc[i]["Total Amount"])}, Date={test.iloc[i]["Date"]}')
+    print()
+
+print('='*80)
+print('STATISTICS COMPARISON:')
+print('='*80)
+print()
+print('Age:')
+print(f'  Original - Mean: {orig["Age"].mean():.2f}, Std: {orig["Age"].std():.2f}, Min: {orig["Age"].min()}, Max: {orig["Age"].max()}')
+print(f'  Test     - Mean: {test["Age"].mean():.2f}, Std: {test["Age"].std():.2f}, Min: {test["Age"].min()}, Max: {test["Age"].max()}')
+print()
+print('Quantity:')
+print(f'  Original - Mean: {orig["Quantity"].mean():.2f}, Std: {orig["Quantity"].std():.2f}, Min: {orig["Quantity"].min()}, Max: {orig["Quantity"].max()}')
+print(f'  Test     - Mean: {test["Quantity"].mean():.2f}, Std: {test["Quantity"].std():.2f}, Min: {test["Quantity"].min()}, Max: {test["Quantity"].max()}')
+print()
+print('Price per Unit:')
+print(f'  Original - Mean: {orig["Price per Unit"].mean():.2f}, Std: {orig["Price per Unit"].std():.2f}, Min: {orig["Price per Unit"].min()}, Max: {orig["Price per Unit"].max()}')
+print(f'  Test     - Mean: {test["Price per Unit"].mean():.2f}, Std: {test["Price per Unit"].std():.2f}, Min: {test["Price per Unit"].min()}, Max: {test["Price per Unit"].max()}')
+print()
+print('Total Amount:')
+print(f'  Original - Mean: {orig["Total Amount"].mean():.2f}, Std: {orig["Total Amount"].std():.2f}, Min: {orig["Total Amount"].min()}, Max: {orig["Total Amount"].max()}')
+print(f'  Test     - Mean: {test["Total Amount"].mean():.2f}, Std: {test["Total Amount"].std():.2f}, Min: {test["Total Amount"].min()}, Max: {test["Total Amount"].max()}')

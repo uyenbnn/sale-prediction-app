@@ -1,33 +1,58 @@
-﻿<main class="layout">
-  <section class="hero">
-    <p class="kicker">Small Business AI Assistant</p>
-    <h1>7-Day Sales Forecast Dashboard</h1>
-    <p class="subtitle">
-      Predict future sales, evaluate model performance, and compare products. Powered by machine learning.
-    </p>
-  </section>
+﻿<div class="app-shell">
+  <aside class="side-rail" aria-label="Dashboard navigation">
+    <div class="rail-brand">
+      <span class="brand-mark"></span>
+      <span class="brand-text">SalePulse</span>
+    </div>
 
-  <section class="dashboard">
-    <nav class="tab-nav">
-      <button 
-        [class.active]="activeTab === 'forecast'" 
+    <nav class="rail-nav">
+      <button
+        [class.active]="activeTab === 'forecast'"
         (click)="setActiveTab('forecast')"
         class="tab-button">
-        📊 Forecast
+        <span class="nav-icon">◉</span>
+        <span>Forecast</span>
       </button>
-      <button 
-        [class.active]="activeTab === 'evaluation'" 
+      <button
+        [class.active]="activeTab === 'evaluation'"
         (click)="setActiveTab('evaluation')"
         class="tab-button">
-        📈 Model Evaluation
+        <span class="nav-icon">◎</span>
+        <span>Evaluation</span>
       </button>
-      <button 
-        [class.active]="activeTab === 'comparison'" 
+      <button
+        [class.active]="activeTab === 'comparison'"
         (click)="setActiveTab('comparison')"
         class="tab-button">
-        🏆 Product Comparison
+        <span class="nav-icon">◌</span>
+        <span>Comparison</span>
       </button>
     </nav>
+
+    <div class="rail-footer">
+      <p class="rail-label">Premium Insights</p>
+      <p class="rail-note">Live sales intelligence</p>
+    </div>
+  </aside>
+
+  <main class="layout">
+    <section class="hero" [class.compact]="isHeroCompact">
+      <div class="hero-content">
+        <p class="kicker">Small Business AI Assistant</p>
+        <h1>7-Day Sales Forecast Dashboard</h1>
+        <p class="subtitle">
+          Predict future sales, evaluate model performance, and compare products with one streamlined machine-learning workspace.
+        </p>
+      </div>
+
+      <div class="hero-meta" aria-label="Dashboard highlights">
+        <span class="hero-chip">Live API Ready</span>
+        <span class="hero-chip">Forecast + Evaluation</span>
+        <span class="hero-chip">Product Strategy Insights</span>
+      </div>
+    </section>
+
+    <section class="dashboard">
 
     @if (errorMessage) {
       <div class="alert alert-error">{{ errorMessage }}</div>
@@ -150,13 +175,30 @@
       <div class="tab-content">
         <div class="evaluation-intro">
           <p>Evaluate model performance against actual sales data.</p>
-          <button (click)="submitEvaluation()" [disabled]="loadingEvaluation" class="btn-primary">
-            @if (loadingEvaluation) {
-              Loading Evaluation...
-            } @else {
-              Load Model Evaluation
-            }
-          </button>
+          <div class="evaluation-actions">
+            <button (click)="submitEvaluation()" [disabled]="loadingEvaluation" class="btn-primary">
+              @if (loadingEvaluation) {
+                Loading Evaluation...
+              } @else {
+                Load Default Evaluation
+              }
+            </button>
+
+            <div class="csv-upload-row">
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                (change)="onEvaluationFileSelected($event)"
+              />
+              <button (click)="submitEvaluationCsv()" [disabled]="loadingEvaluationCsv" class="btn-primary">
+                @if (loadingEvaluationCsv) {
+                  Evaluating CSV...
+                } @else {
+                  Evaluate Uploaded CSV
+                }
+              </button>
+            </div>
+          </div>
         </div>
 
         @if (evaluationData) {
@@ -183,6 +225,9 @@
             <div class="chart-container chart-container-large">
               <h3>Actual vs Predicted Sales</h3>
               <canvas #evaluationChartCanvas></canvas>
+              @if (getEvaluationChartUrl()) {
+                <img [src]="getEvaluationChartUrl()" alt="Model evaluation chart" class="evaluation-image" />
+              }
             </div>
 
             <div class="table-section">
@@ -208,6 +253,77 @@
                         <td>{{ row.error_percentage.toFixed(2) }}%</td>
                       </tr>
                     }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        }
+
+        @if (uploadedEvaluationData) {
+          <div class="evaluation-section">
+            <div class="metrics-grid">
+              <article class="metric-card">
+                <h4>Dataset</h4>
+                <p class="metric-value metric-value-text">{{ uploadedEvaluationData.dataset_name }}</p>
+              </article>
+              <article class="metric-card">
+                <h4>Total Samples</h4>
+                <p class="metric-value">{{ uploadedEvaluationData.total_samples }}</p>
+              </article>
+              <article class="metric-card">
+                <h4>R²</h4>
+                <p class="metric-value">{{ uploadedEvaluationData.metrics.r2.toFixed(4) }}</p>
+              </article>
+              <article class="metric-card">
+                <h4>MAPE</h4>
+                <p class="metric-value">{{ uploadedEvaluationData.metrics.mape.toFixed(2) }}%</p>
+              </article>
+            </div>
+
+            <div class="chart-container chart-container-large">
+              <h3>Uploaded CSV: Actual vs Predicted</h3>
+              <canvas #uploadedEvaluationChartCanvas></canvas>
+              @if (getUploadedEvaluationChartUrl()) {
+                <img [src]="getUploadedEvaluationChartUrl()" alt="Uploaded CSV evaluation chart" class="evaluation-image" />
+              }
+            </div>
+
+            <div class="table-section">
+              <h3>Uploaded CSV Error Statistics</h3>
+              <div class="table-wrapper">
+                <table class="evaluation-table">
+                  <thead>
+                    <tr>
+                      <th>Metric</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Mean Error</td>
+                      <td>{{ uploadedEvaluationData.error_statistics.mean_error.toFixed(2) }}</td>
+                    </tr>
+                    <tr>
+                      <td>Median Error</td>
+                      <td>{{ uploadedEvaluationData.error_statistics.median_error.toFixed(2) }}</td>
+                    </tr>
+                    <tr>
+                      <td>Standard Deviation</td>
+                      <td>{{ uploadedEvaluationData.error_statistics.std_error.toFixed(2) }}</td>
+                    </tr>
+                    <tr>
+                      <td>Within 10% Error</td>
+                      <td>{{ uploadedEvaluationData.error_statistics.predictions_within_10_percent }}</td>
+                    </tr>
+                    <tr>
+                      <td>Within 20% Error</td>
+                      <td>{{ uploadedEvaluationData.error_statistics.predictions_within_20_percent }}</td>
+                    </tr>
+                    <tr>
+                      <td>Within 30% Error</td>
+                      <td>{{ uploadedEvaluationData.error_statistics.predictions_within_30_percent }}</td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -295,5 +411,6 @@
         }
       </div>
     }
-  </section>
-</main>
+    </section>
+  </main>
+</div>

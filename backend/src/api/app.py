@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.config import MODEL_DIR
 from src.api.routes.predict import router as predict_router
+from src.api.routes.model_evaluation import router as evaluation_router
 
 app = FastAPI(title="Sales Prediction API", version="0.1.0")
 
@@ -18,3 +19,4 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(MODEL_DIR)), name="static")
 
 app.include_router(predict_router, prefix="/api")
+app.include_router(evaluation_router, prefix="/api")

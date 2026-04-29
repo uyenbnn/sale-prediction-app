@@ -1,8 +1,8 @@
-import { Component, ViewChild, ElementRef } from '@angular/core';
+import { Component, ViewChild, ElementRef, ChangeDetectorRef, NgZone, HostListener } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-import { finalize, timeout } from 'rxjs';
+import { finalize, timeout, type Subscription } from 'rxjs';
 import { Chart, type ChartConfiguration, type ScatterDataPoint } from 'chart.js/auto';
 
 type PredictRequest = {
@@ -55,6 +55,33 @@ type AccuracyTrendPoint = {
   mape: number;
 };
 
+type OverfittingAnalysis = {
+  mae: number;
+  rmse: number;
+  r2: number;
+  mape: number;
+  is_acceptable: boolean;
+  interpretation: string;
+};
+
+type EvaluationErrorStatistics = {
+  mean_error: number;
+  median_error: number;
+  std_error: number;
+  max_error: number;
+  min_error: number;
+  predictions_within_10_percent: number;
+  predictions_within_20_percent: number;
+  predictions_within_30_percent: number;
+};
+
+type EvaluationSamplePrediction = {
+  actual: number;
+  predicted: number;
+  absolute_error: number;
+  error_percentage: number;
+};
+
 type EvaluationSummary = {
   total_samples: number;
   overall_mae: number;
@@ -68,6 +95,19 @@ type EvaluationResponse = {
   evaluation_rows: EvaluationRow[];
   summary: EvaluationSummary;
   accuracy_trend: AccuracyTrendPoint[];
+  chart_image_url?: string | null;
+  chart_image_path?: string | null;
+};
+
+type ModelEvaluationCsvResponse = {
+  dataset_name: string;
+  total_samples: number;
+  metrics: OverfittingAnalysis;
+  error_statistics: EvaluationErrorStatistics;
+  sample_predictions: EvaluationSamplePrediction[];
+  chart_image_url?: string | null;
+  chart_image_path?: string | null;
+  file_uploaded_successfully: boolean;
 };
 
 type ProductComparisonMetric = {
@@ -97,11 +137,14 @@ export class App {
   @ViewChild('lineChartCanvas') lineChartCanvas?: ElementRef<HTMLCanvasElement>;
   @ViewChild('barChartCanvas') barChartCanvas?: ElementRef<HTMLCanvasElement>;
   @ViewChild('evaluationChartCanvas') evaluationChartCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('uploadedEvaluationChartCanvas') uploadedEvaluationChartCanvas?: ElementRef<HTMLCanvasElement>;
   @ViewChild('comparisonChartCanvas') comparisonChartCanvas?: ElementRef<HTMLCanvasElement>;
 
   protected activeTab = 'forecast';
+  protected isHeroCompact = false;
   protected loadingForecast = false;
   protected loadingEvaluation = false;
+  protected loadingEvaluationCsv = false;
   protected loadingComparison = false;
   protected errorMessage = '';
   protected successMessage = '';
@@ -109,19 +152,34 @@ export class App {
   protected result: PredictResponse | null = null;
   protected forecastData: ForecastRangeResponse | null = null;
   protected evaluationData: EvaluationResponse | null = null;
+  protected uploadedEvaluationData: ModelEvaluationCsvResponse | null = null;
   protected comparisonData: ProductComparisonResponse | null = null;
+  protected selectedEvaluationFile: File | null = null;
   
   protected readonly forecastForm;
   protected readonly comparisonForm;
   protected readonly products = ['Beauty', 'Food', 'Electronics', 'Clothing', 'Home'];
   
-  private readonly apiUrl = 'http://127.0.0.1:8000/api';
+  private readonly apiBaseUrl = 'http://127.0.0.1:8000';
+  private readonly apiUrl = `${this.apiBaseUrl}/api`;
   private lineChartInstance?: Chart;
   private barChartInstance?: Chart;
   private evaluationChartInstance?: Chart<'scatter', ScatterDataPoint[]>;
+  private uploadedEvaluationChartInstance?: Chart<'scatter', ScatterDataPoint[]>;
   private comparisonChartInstance?: Chart;
+  private evaluationRequestSubscription?: Subscription;
+  private evaluationCsvRequestSubscription?: Subscription;
+  private evaluationChartVersion = 0;
+  private uploadedEvaluationChartVersion = 0;
+  private readonly compactEnterScrollY = 56;
+  private readonly compactExitScrollY = 16;
 
-  constructor(private fb: FormBuilder, private http: HttpClient) {
+  constructor(
+    private fb: FormBuilder,
+    private http: HttpClient,
+    private cdr: ChangeDetectorRef,
+    private ngZone: NgZone
+  ) {
     this.forecastForm = this.fb.nonNullable.group({
       product: ['Beauty', [Validators.required, Validators.maxLength(200)]],
       start_date: [this.getTodayIsoDate(), [Validators.required]],
@@ -138,15 +196,22 @@ export class App {
     this.activeTab = tab;
     this.errorMessage = '';
     this.successMessage = '';
-    setTimeout(() => {
-      if (tab === 'forecast' && this.lineChartCanvas) {
-        this.renderForecastCharts();
-      } else if (tab === 'evaluation' && this.evaluationChartCanvas) {
-        this.renderEvaluationChart();
-      } else if (tab === 'comparison' && this.comparisonChartCanvas) {
-        this.renderComparisonChart();
-      }
-    }, 100);
+    this.renderActiveTabChartsAfterViewReady();
+  }
+
+  @HostListener('window:scroll')
+  protected onWindowScroll(): void {
+    const currentScrollTop = Math.max(window.scrollY || 0, 0);
+
+    // Use hysteresis to avoid rapid expand/shrink toggling near the threshold.
+    if (!this.isHeroCompact && currentScrollTop > this.compactEnterScrollY) {
+      this.isHeroCompact = true;
+      return;
+    }
+
+    if (this.isHeroCompact && currentScrollTop < this.compactExitScrollY) {
+      this.isHeroCompact = false;
+    }
   }
 
   protected submitForecast(): void {
@@ -180,7 +245,9 @@ export class App {
         next: (response) => {
           this.forecastData = response;
           this.successMessage = `Forecast generated for ${response.summary.total_days} days`;
-          setTimeout(() => this.renderForecastCharts(), 200);
+          if (this.activeTab === 'forecast') {
+            this.renderActiveTabChartsAfterViewReady();
+          }
         },
         error: (err: unknown) => {
           const detail = (err as { error?: { detail?: string } })?.error?.detail;
@@ -193,10 +260,13 @@ export class App {
     this.errorMessage = '';
     this.successMessage = '';
     this.evaluationData = null;
+    this.uploadedEvaluationData = null;
     this.evaluationChartInstance?.destroy();
+    this.uploadedEvaluationChartInstance?.destroy();
+    this.evaluationCsvRequestSubscription?.unsubscribe();
 
     this.loadingEvaluation = true;
-    this.http
+    this.evaluationRequestSubscription = this.http
       .get<EvaluationResponse>(`${this.apiUrl}/model-evaluation`)
       .pipe(
         timeout(15000),
@@ -205,12 +275,66 @@ export class App {
       .subscribe({
         next: (response) => {
           this.evaluationData = response;
+          this.evaluationChartVersion = Date.now();
           this.successMessage = `Evaluated ${response.summary.total_samples} samples`;
-          setTimeout(() => this.renderEvaluationChart(), 200);
+          if (this.activeTab === 'evaluation') {
+            this.renderActiveTabChartsAfterViewReady();
+          }
         },
         error: (err: unknown) => {
           const detail = (err as { error?: { detail?: string } })?.error?.detail;
           this.errorMessage = detail || 'Failed to load evaluation. Please try again.';
+        }
+      });
+  }
+
+  protected onEvaluationFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0] ?? null;
+    this.selectedEvaluationFile = file;
+  }
+
+  protected submitEvaluationCsv(): void {
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.evaluationData = null;
+    this.uploadedEvaluationData = null;
+    this.evaluationChartInstance?.destroy();
+    this.uploadedEvaluationChartInstance?.destroy();
+    this.evaluationRequestSubscription?.unsubscribe();
+
+    if (!this.selectedEvaluationFile) {
+      this.errorMessage = 'Please select a CSV file to evaluate.';
+      return;
+    }
+
+    if (!this.selectedEvaluationFile.name.toLowerCase().endsWith('.csv')) {
+      this.errorMessage = 'Only CSV files are supported for evaluation.';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', this.selectedEvaluationFile);
+
+    this.loadingEvaluationCsv = true;
+    this.evaluationCsvRequestSubscription = this.http
+      .post<ModelEvaluationCsvResponse>(`${this.apiUrl}/model-evaluation/csv`, formData)
+      .pipe(
+        timeout(30000),
+        finalize(() => (this.loadingEvaluationCsv = false))
+      )
+      .subscribe({
+        next: (response) => {
+          this.uploadedEvaluationData = response;
+          this.uploadedEvaluationChartVersion = Date.now();
+          this.successMessage = `CSV evaluation completed for ${response.total_samples} samples`;
+          if (this.activeTab === 'evaluation') {
+            this.renderActiveTabChartsAfterViewReady();
+          }
+        },
+        error: (err: unknown) => {
+          const detail = (err as { error?: { detail?: string } })?.error?.detail;
+          this.errorMessage = detail || 'Failed to evaluate uploaded CSV. Please try again.';
         }
       });
   }
@@ -240,7 +364,9 @@ export class App {
         next: (response) => {
           this.comparisonData = response;
           this.successMessage = `Compared ${response.comparison_metrics.length} products`;
-          setTimeout(() => this.renderComparisonChart(), 200);
+          if (this.activeTab === 'comparison') {
+            this.renderActiveTabChartsAfterViewReady();
+          }
         },
         error: (err: unknown) => {
           const detail = (err as { error?: { detail?: string } })?.error?.detail;
@@ -257,6 +383,30 @@ export class App {
 
     this.renderLineChart(dates, sales);
     this.renderSuggestionBar();
+  }
+
+  private renderActiveTabChartsAfterViewReady(): void {
+    this.cdr.detectChanges();
+    this.ngZone.runOutsideAngular(() => {
+      requestAnimationFrame(() => {
+        this.ngZone.run(() => {
+          if (this.activeTab === 'forecast') {
+            this.renderForecastCharts();
+            return;
+          }
+
+          if (this.activeTab === 'evaluation') {
+            this.renderEvaluationChart();
+            this.renderUploadedEvaluationChart();
+            return;
+          }
+
+          if (this.activeTab === 'comparison') {
+            this.renderComparisonChart();
+          }
+        });
+      });
+    });
   }
 
   private renderLineChart(dates: string[], sales: number[]): void {
@@ -372,6 +522,47 @@ export class App {
     this.evaluationChartInstance = new Chart<'scatter', ScatterDataPoint[]>(ctx, config);
   }
 
+  private renderUploadedEvaluationChart(): void {
+    if (!this.uploadedEvaluationChartCanvas || !this.uploadedEvaluationData?.sample_predictions) return;
+
+    this.uploadedEvaluationChartInstance?.destroy();
+    const rows = this.uploadedEvaluationData.sample_predictions.slice(0, 20);
+    const ctx = this.uploadedEvaluationChartCanvas.nativeElement.getContext('2d');
+    if (!ctx) return;
+
+    const config: ChartConfiguration<'scatter', ScatterDataPoint[]> = {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          label: 'Actual Sales',
+          data: rows.map((r, i) => ({ x: i, y: r.actual })),
+          borderColor: 'rgb(231, 111, 81)',
+          backgroundColor: 'rgba(231, 111, 81, 0.5)',
+          pointRadius: 5
+        }, {
+          label: 'Predicted Sales',
+          data: rows.map((r, i) => ({ x: i, y: r.predicted })),
+          borderColor: 'rgb(42, 157, 143)',
+          backgroundColor: 'rgba(42, 157, 143, 0.5)',
+          pointRadius: 5
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: true }
+        },
+        scales: {
+          x: { title: { display: true, text: 'Sample Index' } },
+          y: { title: { display: true, text: 'Sales ($)' } }
+        }
+      }
+    };
+
+    this.uploadedEvaluationChartInstance = new Chart<'scatter', ScatterDataPoint[]>(ctx, config);
+  }
+
   private renderComparisonChart(): void {
     if (!this.comparisonChartCanvas || !this.comparisonData?.comparison_metrics) return;
 
@@ -444,5 +635,20 @@ export class App {
     if (suggestion === 'Increase stock') return 'suggestion-increase';
     if (suggestion === 'Reduce inventory') return 'suggestion-reduce';
     return 'suggestion-maintain';
+  }
+
+  protected getEvaluationChartUrl(): string | null {
+    const chartPath = this.evaluationData?.chart_image_url;
+    return chartPath ? this.buildChartUrl(chartPath, this.evaluationChartVersion) : null;
+  }
+
+  protected getUploadedEvaluationChartUrl(): string | null {
+    const chartPath = this.uploadedEvaluationData?.chart_image_url;
+    return chartPath ? this.buildChartUrl(chartPath, this.uploadedEvaluationChartVersion) : null;
+  }
+
+  private buildChartUrl(chartPath: string, version: number): string {
+    const separator = chartPath.includes('?') ? '&' : '?';
+    return `${this.apiBaseUrl}${chartPath}${separator}v=${version}`;
   }
 }

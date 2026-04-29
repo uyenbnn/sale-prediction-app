@@ -1,0 +1,21 @@
+{
+  "original_dataset": {
+    "mae": 0.0,
+    "rmse": 0.0,
+    "r2": 1.0,
+    "mape": 0.0
+  },
+  "test_dataset": {
+    "mae": 49.559,
+    "rmse": 132.6564,
+    "r2": 0.9573,
+    "mape": 7.79
+  },
+  "differences": {
+    "mae_delta": 49.559,
+    "rmse_delta": 132.6564,
+    "r2_delta": 0.0427,
+    "mae_delta_percent": null,
+    "rmse_delta_percent": null
+  }
+}
